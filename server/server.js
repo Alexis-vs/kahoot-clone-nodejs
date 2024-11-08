@@ -33,39 +33,30 @@ server.listen(3000, () => {
 io.on('connection', (socket) => {
     
     //When host connects for the first time
-    socket.on('host-join', (data) =>{
-        
-        //Check to see if id passed in url corresponds to id of kahoot game in database
-        MongoClient.connect(url, function(err, db) {
-            if (err) throw err;
-            var dbo = db.db("kahootDB");
-            var query = { id:  parseInt(data.id)};
-            dbo.collection('kahootGames').find(query).toArray(function(err, result){
-                if(err) throw err;
-                
-                //A kahoot was found with the id passed in url
-                if(result[0] !== undefined){
-                    var gamePin = Math.floor(Math.random()*90000) + 10000; //new pin for game
-
-                    games.addGame(gamePin, socket.id, false, {playersAnswered: 0, questionLive: false, gameid: data.id, question: 1}); //Creates a game with pin and host id
-
-                    var game = games.getGame(socket.id); //Gets the game data
-
-                    socket.join(game.pin);//The host is joining a room based on the pin
-
-                    console.log('Game Created with pin:', game.pin); 
-
-                    //Sending game pin to host so they can display it for players to join
-                    socket.emit('showGamePin', {
-                        pin: game.pin
-                    });
-                }else{
-                    socket.emit('noGameFound');
-                }
-                db.close();
-            });
-        });
-        
+    socket.on('host-join', async (data) => {
+        try {
+            const db = await MongoClient.connect(url);
+            const dbo = db.db("kahootDB");
+            const query = { id: parseInt(data.id) };
+            const result = await dbo.collection('kahootGames').find(query).toArray();
+    
+            if (result[0] !== undefined) {
+                const gamePin = Math.floor(Math.random() * 90000) + 10000;
+                games.addGame(gamePin, socket.id, false, { playersAnswered: 0, questionLive: false, gameid: data.id, question: 1 });
+                const game = games.getGame(socket.id);
+    
+                socket.join(game.pin);
+                console.log('Game Created with pin:', game.pin);
+    
+                socket.emit('showGamePin', { pin: game.pin });
+            } else {
+                socket.emit('noGameFound');
+            }
+            db.close(); // Important to close the connection
+        } catch (err) {
+            console.error("Error connecting to MongoDB: ", err);
+            socket.emit('noGameFound');
+        }
     });
     
     //When the host connects from the game view
